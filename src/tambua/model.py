@@ -39,11 +39,31 @@ def metrics(y: np.ndarray, predicted: np.ndarray, classes: list[str]) -> dict:
         recalls.append(tp / (tp + fn) if tp + fn else None)
         f1s.append(2 * tp / (2 * tp + fp + fn) if 2 * tp + fp + fn else None)
         matrix_counts.append([int(np.sum((y == actual) & (predicted == name))) for name in classes])
+    missing_classes = [name for name, recall in zip(classes, recalls) if recall is None]
     return dict(n=len(y), accuracy=float(np.mean(y == predicted)),
-                balanced_accuracy=float(np.mean([v for v in recalls if v is not None])),
-                macro_f1=float(np.mean([v for v in f1s if v is not None])),
+                balanced_accuracy=(None if missing_classes else float(np.mean(recalls))),
+                macro_f1=(None if missing_classes else float(np.mean(f1s))),
+                missing_reference_classes=missing_classes,
+                support={name: int(np.sum(y == name)) for name in classes},
                 recall=dict(zip(classes, recalls)), f1=dict(zip(classes, f1s)),
                 confusion_matrix=matrix_counts, classes=classes)
+
+
+def patient_summary(records: list[dict[str, str]], y: np.ndarray,
+                    predicted: np.ndarray, classes: list[str]) -> dict:
+    patients = sorted({row["patient_id"] for row in records})
+    per_patient = {}
+    for patient in patients:
+        indices = np.asarray([index for index, row in enumerate(records)
+                              if row["patient_id"] == patient], dtype=np.int64)
+        per_patient[patient] = metrics(y[indices], predicted[indices], classes)
+    accuracies = [item["accuracy"] for item in per_patient.values()]
+    complete = [item["balanced_accuracy"] for item in per_patient.values()
+                if item["balanced_accuracy"] is not None]
+    return dict(n_patients=len(patients), equal_weight_accuracy=float(np.mean(accuracies)),
+                complete_class_patients=len(complete),
+                equal_weight_balanced_accuracy=(float(np.mean(complete)) if complete else None),
+                per_patient=per_patient)
 
 
 def _fit(x: np.ndarray, y: np.ndarray, components: int):
@@ -57,6 +77,12 @@ def _fit(x: np.ndarray, y: np.ndarray, components: int):
 
 
 def train(table_path: str | Path, model_path: str | Path, report_path: str | Path) -> dict:
+    path = Path(model_path)
+    report_file = Path(report_path)
+    if path.exists():
+        raise FileExistsError(path)
+    if report_file.exists():
+        raise FileExistsError(report_file)
     records = rows(table_path)
     if not records:
         raise ValueError("Empty cell table")
@@ -90,18 +116,16 @@ def train(table_path: str | Path, model_path: str | Path, report_path: str | Pat
                   train_patients=sorted(train_patients), test_patients=sorted(test_patients),
                   train_cells=len(training), test_cells=len(testing), fit_seconds=fit_seconds,
                   test=metrics(actual_names, predicted_names, classes),
+                  test_by_patient=patient_summary(testing, actual_names, predicted_names, classes),
                   majority_baseline=metrics(actual_names, np.full(len(testing), classes[majority]), classes),
                   claim_limit="Virtual-marker scores are not measured protein abundance; this is research cell-type prediction.")
-    Path(report_path).parent.mkdir(parents=True, exist_ok=True)
-    Path(report_path).write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
-    path = Path(model_path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    if path.exists():
-        raise FileExistsError(path)
     np.savez_compressed(path, x=x_train, y=y_train,
                         metadata=json.dumps(dict(format="tambua-fastpls-v1", classes=classes,
                                                  feature_names=names, components=components,
                                                  fit_refits_on_load=True)))
+    report_file.parent.mkdir(parents=True, exist_ok=True)
+    report_file.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
     return report
 
 

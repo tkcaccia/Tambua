@@ -7,7 +7,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tambua.model import predict, train
+from tambua.model import metrics, patient_summary, predict, train
 from tambua.table import MARKERS, build_table, build_inference_table
 
 
@@ -58,6 +58,8 @@ def test_full_cpu_handoff_and_patient_disjoint_evaluation(tmp_path: Path):
     assert report["test"]["n"] == 40
     assert report["test"]["balanced_accuracy"] > .9
     assert report["test"]["balanced_accuracy"] > report["majority_baseline"]["balanced_accuracy"]
+    assert report["test_by_patient"]["n_patients"] == 1
+    assert report["test_by_patient"]["equal_weight_accuracy"] == report["test"]["accuracy"]
     assert json.loads((tmp_path / "report.json").read_text())["test_patients"] == ["p3"]
     assert predict(table, model, tmp_path / "predictions.csv") == 120
     future_manifest = tmp_path / "future_manifest.csv"
@@ -67,6 +69,23 @@ def test_full_cpu_handoff_and_patient_disjoint_evaluation(tmp_path: Path):
     future = tmp_path / "future_cells.csv"
     assert build_inference_table(future_manifest, future)["cells"] == 40
     assert predict(future, model, tmp_path / "future_predictions.csv") == 40
+    with pytest.raises(FileExistsError):
+        train(table, model, tmp_path / "another_report.json")
+    assert not (tmp_path / "another_report.json").exists()
+
+
+def test_missing_reference_class_is_visible_not_averaged_away():
+    classes = ["epithelial", "lymphocyte"]
+    actual = np.asarray(["epithelial", "epithelial"])
+    predicted = np.asarray(["epithelial", "lymphocyte"])
+    result = metrics(actual, predicted, classes)
+    assert result["support"] == {"epithelial": 2, "lymphocyte": 0}
+    assert result["missing_reference_classes"] == ["lymphocyte"]
+    assert result["balanced_accuracy"] is None
+    summary = patient_summary([{"patient_id": "one"}, {"patient_id": "one"}],
+                              actual, predicted, classes)
+    assert summary["complete_class_patients"] == 0
+    assert summary["equal_weight_balanced_accuracy"] is None
 
 
 def test_patient_leakage_rejected(tmp_path: Path):

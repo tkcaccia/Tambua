@@ -15,7 +15,7 @@ tambua build-inference --manifest new_specimens.csv --output results/new_cells.c
 tambua predict --table results/new_cells.csv --model results/cell_classifier.npz --output results/predictions.csv
 ```
 
-For inference without reference labels, `new_specimens.csv` needs `sample_id,patient_id,nuclei_csv,cyto_csv` and no expert annotation. Use the same compartments as training; the frozen model rejects missing feature columns. The training command reports accuracy, balanced accuracy, macro F1, each class recall/F1, confusion matrix and a training-majority baseline on **test patients only**. It refuses patient leakage or test classes absent from training. Cell-level scores are descriptive; patient-level intervals and external validation remain necessary before a performance claim.
+For inference without reference labels, `new_specimens.csv` needs `sample_id,patient_id,nuclei_csv,cyto_csv` and no expert annotation. Use the same compartments as training; the frozen model rejects missing feature columns. The training command reports accuracy, balanced accuracy, macro F1, each class recall/F1, confusion matrix, a training-majority baseline, and equal-weight per-patient accuracy on **test patients only**. A patient or entire test split missing a reference class is listed explicitly; its balanced accuracy and macro F1 are undefined rather than averaged over the remaining classes. It refuses patient leakage or test classes absent from training. Cell-level scores are descriptive; patient-level uncertainty intervals and external validation remain necessary before a performance claim.
 
 ## Dataset strategy
 
