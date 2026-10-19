@@ -12,7 +12,7 @@ license = {text = "MIT"}
 dependencies = ["numpy>=1.23"]
 
 [project.optional-dependencies]
-datasets = ["pyarrow>=18", "Pillow>=11", "tifffile==2025.5.10", "zarr==2.18.7", "imagecodecs>=2025.3.30,<2027"]
+datasets = ["pyarrow>=18", "Pillow>=11", "tifffile==2025.5.10", "zarr==2.18.7", "imagecodecs>=2025.3.30,<2027", "scipy>=1.10,<2"]
 
 [project.scripts]
 tambua = "tambua.cli:main"
