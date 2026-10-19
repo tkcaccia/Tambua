@@ -7,7 +7,7 @@ import json
 from .model import predict, train
 from .table import build_table, build_inference_table
 from .monusac import extract
-from .download import download
+from .download import download, download_orion_crc33
 from .orion import extract_window
 
 
@@ -37,6 +37,8 @@ def main(argv=None):
     dataset.add_argument("--per-split", type=int, default=4)
     acquire = sub.add_parser("download-monusac", help="Download and verify the pinned MoNuSAC Parquet mirror")
     acquire.add_argument("--output-dir", required=True)
+    acquire_orion = sub.add_parser("download-orion-crc33", help="Download pinned calibrated ORION CRC33_01 inputs, excluding IF WSI")
+    acquire_orion.add_argument("--output-dir", required=True)
     orion = sub.add_parser("extract-orion", help="Make a calibrated ORION H&E/cell-mask window")
     orion.add_argument("--he", required=True)
     orion.add_argument("--mask", required=True)
@@ -59,6 +61,8 @@ def main(argv=None):
         result = extract(args.train_parquet, args.test_parquet, args.output_dir, args.per_split)
     elif args.command == "download-monusac":
         result = download(args.output_dir)
+    elif args.command == "download-orion-crc33":
+        result = download_orion_crc33(args.output_dir)
     elif args.command == "extract-orion":
         result = extract_window(args.he, args.mask, args.measured_csv, args.output_dir,
                                 x=args.x, y=args.y, size=args.size, sample=args.sample)

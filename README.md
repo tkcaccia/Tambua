@@ -36,11 +36,14 @@ tambua extract-monusac --train-parquet data/monusac-train-0000.parquet \
 
 The downloaded Parquet contains all 310 released images and annotation maps. The extraction command produces eight example H&E images, scored instance masks and independent cell-type CSVs from eight distinct patients. It does **not** generate GigaTIME scores or a trained biological classifier. Details and checksums are in [dataset notes](docs/DATASETS.md).
 
-For a physically calibrated ORION validation window, download the registered H&E, matching cell mask and measured-cell table from the [first-party public S3 release](https://github.com/labsyspharm/orion-crc/blob/main/datarelease-README.md), then use level-zero coordinates:
+For a physically calibrated ORION validation window, acquire the pinned registered H&E, matching cell mask and measured-cell table from the [first-party public S3 release](https://github.com/labsyspharm/orion-crc/blob/main/datarelease-README.md), then use level-zero coordinates. The downloader deliberately excludes the 43.9 GiB multiplex IF WSI:
 
 ```bash
-tambua extract-orion --he he_registered.ome.tif --mask cell_mask.ome.tif \
-  --measured-csv measured_cells.csv --sample CRC33_01 --x 24576 --y 39424 \
+tambua download-orion-crc33 --output-dir data/orion_crc33_01
+tambua extract-orion --he data/orion_crc33_01/he_registered.ome.tif \
+  --mask data/orion_crc33_01/cell_mask.ome.tif \
+  --measured-csv data/orion_crc33_01/measured_cells.csv \
+  --sample CRC33_01 --x 24576 --y 39424 \
   --size 2048 --output-dir data/orion_crc33_01/window_x24576_y39424_verified
 ```
 
