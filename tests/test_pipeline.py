@@ -8,7 +8,7 @@ import numpy as np
 import pytest
 
 from tambua.model import predict, train
-from tambua.table import MARKERS, build_table
+from tambua.table import MARKERS, build_table, build_inference_table
 
 
 def write(path: Path, records: list[dict]) -> None:
@@ -60,6 +60,13 @@ def test_full_cpu_handoff_and_patient_disjoint_evaluation(tmp_path: Path):
     assert report["test"]["balanced_accuracy"] > report["majority_baseline"]["balanced_accuracy"]
     assert json.loads((tmp_path / "report.json").read_text())["test_patients"] == ["p3"]
     assert predict(table, model, tmp_path / "predictions.csv") == 120
+    future_manifest = tmp_path / "future_manifest.csv"
+    new_specimen = specimen(tmp_path, "future", "p4", "test", 3)
+    write(future_manifest, [{key: value for key, value in new_specimen.items()
+                             if key in ("sample_id", "patient_id", "nuclei_csv", "cyto_csv")}])
+    future = tmp_path / "future_cells.csv"
+    assert build_inference_table(future_manifest, future)["cells"] == 40
+    assert predict(future, model, tmp_path / "future_predictions.csv") == 40
 
 
 def test_patient_leakage_rejected(tmp_path: Path):

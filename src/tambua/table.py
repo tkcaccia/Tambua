@@ -101,3 +101,46 @@ def build_table(manifest_path: str | Path, output_path: str | Path,
                   reference_labels="independent expert cell types, supplied by manifest")
     path.with_suffix(".json").write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
     return report
+
+
+def build_inference_table(manifest_path: str | Path, output_path: str | Path,
+                          *, compartments: tuple[str, ...] = ("nuclei", "cyto")) -> dict:
+    """Join unlabelled CellPhenotyper cells for application of a frozen model."""
+    if not compartments or any(c not in ("nuclei", "cyto") for c in compartments):
+        raise ValueError("Choose nuclei, cyto or both")
+    manifest = rows(manifest_path)
+    if not manifest:
+        raise ValueError("Empty inference manifest")
+    features = [f"{part}_{marker}" for part in compartments for marker in MARKERS]
+    output = []
+    seen = set()
+    for specimen in manifest:
+        sample = specimen["sample_id"].strip()
+        patient = specimen["patient_id"].strip()
+        if not sample or not patient or sample in seen:
+            raise ValueError("Unique sample_id and patient_id required")
+        seen.add(sample)
+        tables = {}
+        for part in compartments:
+            key = f"{part}_csv"
+            if not specimen.get(key):
+                raise ValueError(f"Missing {key} for {sample}")
+            tables[part] = unique_index(rows(specimen[key]), "label_id", key)
+        shared = set.intersection(*(set(table) for table in tables.values()))
+        for cell_id in sorted(shared):
+            item = dict(sample_id=sample, patient_id=patient, label_id=cell_id)
+            for part, table in tables.items():
+                item.update(marker_values(table[cell_id], part))
+            output.append(item)
+    if not output:
+        raise ValueError("No cells shared by the requested compartments")
+    path = Path(output_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", newline="", encoding="utf-8") as stream:
+        writer = csv.DictWriter(stream, fieldnames=["sample_id", "patient_id", "label_id", *features])
+        writer.writeheader()
+        writer.writerows(output)
+    report = dict(samples=len(seen), cells=len(output), feature_names=features,
+                  reference_labels_used=False, value_semantics=VALUE_SEMANTICS)
+    path.with_suffix(".json").write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
+    return report

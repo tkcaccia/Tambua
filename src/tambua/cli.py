@@ -5,7 +5,7 @@ import argparse
 import json
 
 from .model import predict, train
-from .table import build_table
+from .table import build_table, build_inference_table
 from .monusac import extract
 from .download import download
 
@@ -17,6 +17,10 @@ def main(argv=None):
     build.add_argument("--manifest", required=True)
     build.add_argument("--output", required=True)
     build.add_argument("--compartments", choices=("nuclei", "cyto", "both"), default="both")
+    future = sub.add_parser("build-inference", help="Join new CellPhenotyper cells without reference labels")
+    future.add_argument("--manifest", required=True)
+    future.add_argument("--output", required=True)
+    future.add_argument("--compartments", choices=("nuclei", "cyto", "both"), default="both")
     fit = sub.add_parser("train", help="Fit fastPLS and evaluate only held-out patients")
     fit.add_argument("--table", required=True)
     fit.add_argument("--model", required=True)
@@ -36,6 +40,9 @@ def main(argv=None):
     if args.command == "build-table":
         parts = ("nuclei", "cyto") if args.compartments == "both" else (args.compartments,)
         result = build_table(args.manifest, args.output, compartments=parts)
+    elif args.command == "build-inference":
+        parts = ("nuclei", "cyto") if args.compartments == "both" else (args.compartments,)
+        result = build_inference_table(args.manifest, args.output, compartments=parts)
     elif args.command == "train":
         result = train(args.table, args.model, args.report)
     elif args.command == "extract-monusac":
