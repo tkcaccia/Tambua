@@ -8,7 +8,7 @@ CellPhenotyper produces instance masks and GigaTIME `*_nuclei_gigatime_mean_inte
 
 ```bash
 python3 -m venv .venv
-.venv/bin/pip install -e .
+.venv/bin/pip install -e '.[datasets]'
 tambua build-table --manifest specimens.csv --output results/cells.csv --compartments both
 tambua train --table results/cells.csv --model results/cell_classifier.npz --report results/test_report.json
 tambua build-inference --manifest new_specimens.csv --output results/new_cells.csv --compartments both
@@ -35,6 +35,16 @@ tambua extract-monusac --train-parquet data/monusac-train-0000.parquet \
 ```
 
 The downloaded Parquet contains all 310 released images and annotation maps. The extraction command produces eight example H&E images, scored instance masks and independent cell-type CSVs from eight distinct patients. It does **not** generate GigaTIME scores or a trained biological classifier. Details and checksums are in [dataset notes](docs/DATASETS.md).
+
+For a physically calibrated ORION validation window, download the registered H&E, matching cell mask and measured-cell table from the [first-party public S3 release](https://github.com/labsyspharm/orion-crc/blob/main/datarelease-README.md), then use level-zero coordinates:
+
+```bash
+tambua extract-orion --he he_registered.ome.tif --mask cell_mask.ome.tif \
+  --measured-csv measured_cells.csv --sample CRC33_01 --x 24576 --y 39424 \
+  --size 2048 --output-dir data/orion_crc33_01/window_x24576_y39424
+```
+
+This checks the OME physical pixel sizes and native image/mask alignment, removes instances cut by the crop boundary, joins every retained instance to exactly one **measured** protein row, and writes calibrated OME-TIFFs with source hashes. Those rows are a separate reference for future evaluation; `extract-orion` does not assign cell types or run GigaTIME. The demonstrated CRC33_01 window is 0.325 µm/pixel and contains 4,104 complete cells. It is one patient and therefore cannot establish held-out classification accuracy.
 
 ## Relationship to Bora
 

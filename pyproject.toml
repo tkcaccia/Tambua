@@ -11,6 +11,9 @@ requires-python = ">=3.10"
 license = {text = "MIT"}
 dependencies = ["numpy>=1.23", "fastPLS @ git+https://github.com/tkcaccia/fastPLS-py.git@b4ea261902244bfb84ad933a236d364d19f905ee"]
 
+[project.optional-dependencies]
+datasets = ["pyarrow>=18", "Pillow>=11", "tifffile==2025.5.10", "zarr==2.18.7", "imagecodecs>=2025.3.30,<2027"]
+
 [project.scripts]
 tambua = "tambua.cli:main"
 
