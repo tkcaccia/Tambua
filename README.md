@@ -9,8 +9,14 @@ CellPhenotyper produces instance masks and GigaTIME `*_nuclei_gigatime_mean_inte
 ```bash
 python3 -m venv .venv
 .venv/bin/pip install -e '.[datasets]'
-# In R >= 4.6, install the pinned GitHub release (requires its documented system dependencies):
-Rscript -e 'remotes::install_github("tkcaccia/fastPLS@265108b6aa250c2534f98ec89037bb5cd001dca0", upgrade="never")'
+# In R >= 4.6, install float and gpuinfo, then the pinned GitHub fastPLS source:
+Rscript -e 'install.packages(c("float", "gpuinfo"), repos="https://cloud.r-project.org")'
+fastpls_source_dir=$(mktemp -d)
+git init "$fastpls_source_dir"
+git -C "$fastpls_source_dir" remote add origin https://github.com/tkcaccia/fastPLS.git
+git -C "$fastpls_source_dir" fetch --depth 1 origin 265108b6aa250c2534f98ec89037bb5cd001dca0
+git -C "$fastpls_source_dir" checkout --detach FETCH_HEAD
+R CMD INSTALL "$fastpls_source_dir"
 Rscript -e 'stopifnot(as.character(packageVersion("fastPLS")) == "0.4")'
 tambua build-table --manifest specimens.csv --output results/cells.csv --compartments both
 tambua train --table results/cells.csv --model results/cell_classifier.rds --report results/test_report.json

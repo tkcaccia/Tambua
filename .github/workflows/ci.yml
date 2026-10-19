@@ -24,8 +24,13 @@ jobs:
         run: sudo apt-get update -qq && sudo apt-get install -y -qq build-essential gfortran pkg-config libopenblas-dev liblapack-dev
       - name: Install pinned fastPLS 0.4 from GitHub
         run: |
-          Rscript -e 'install.packages(c("remotes", "float", "gpuinfo"), repos="https://cloud.r-project.org")'
-          Rscript -e 'remotes::install_github("tkcaccia/fastPLS@265108b6aa250c2534f98ec89037bb5cd001dca0", upgrade="never", dependencies=FALSE)'
+          Rscript -e 'install.packages(c("float", "gpuinfo"), repos="https://cloud.r-project.org")'
+          git init -q fastpls-source
+          git -C fastpls-source remote add origin https://github.com/tkcaccia/fastPLS.git
+          git -C fastpls-source fetch -q --depth 1 origin 265108b6aa250c2534f98ec89037bb5cd001dca0
+          git -C fastpls-source checkout -q --detach FETCH_HEAD
+          test "$(git -C fastpls-source rev-parse HEAD)" = "265108b6aa250c2534f98ec89037bb5cd001dca0"
+          R CMD INSTALL fastpls-source
           Rscript -e 'stopifnot(as.character(packageVersion("fastPLS")) == "0.4")'
       - name: Install package and CPU test dependencies
         run: python -m pip install --disable-pip-version-check -e '.[datasets]' pytest
