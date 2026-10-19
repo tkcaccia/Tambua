@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="Tambua identifies H&E cell types using CellPhenotyper, calibrated GigaTIME virtual markers and fastPLS 0.4.">
+  <title>Tambua — cell identity from virtual markers</title>
+  <style>
+    :root{font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#19322e;background:#f6f8f4;line-height:1.55}
+    *{box-sizing:border-box}body{margin:0}a{color:#146659}a:hover{text-decoration-thickness:2px}.wrap{max-width:1110px;margin:auto;padding:0 28px}
+    header{background:#102b2a;color:#eff9ee}nav{display:flex;align-items:center;justify-content:space-between;padding:18px 0;gap:20px}nav strong{font-size:1.15rem;letter-spacing:.03em}nav a{color:#d6eee1;text-decoration:none;margin-left:22px;font-size:.92rem}
+    .hero{padding:76px 0 92px;max-width:830px}.eyebrow{text-transform:uppercase;letter-spacing:.16em;font-size:.77rem;font-weight:800;color:#9fdbc2}.hero h1{font-size:clamp(2.7rem,6vw,5rem);line-height:1.06;letter-spacing:-.055em;margin:18px 0}.hero p{font-size:1.19rem;color:#d4e5dc;max-width:700px}
+    .actions{display:flex;flex-wrap:wrap;gap:12px;margin-top:32px}.button{display:inline-block;padding:12px 19px;border-radius:9px;background:#98e0b7;color:#102b2a;text-decoration:none;font-weight:750}.button.secondary{background:transparent;color:#e6f4eb;border:1px solid #708b80}
+    main{padding:54px 0 90px}.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}.card{background:white;border:1px solid #dce8df;border-radius:15px;padding:25px;box-shadow:0 8px 28px #163f3110}.card h3{margin:0 0 9px;font-size:1.15rem}.card p{margin:0;color:#4b655d}.step{display:inline-block;background:#dff3e4;color:#146659;border-radius:999px;padding:3px 10px;font-weight:800;font-size:.75rem;margin-bottom:12px}
+    section{margin-top:66px}h2{font-size:2rem;letter-spacing:-.035em;margin:0 0 12px}.lede{color:#4b655d;max-width:830px;margin:0 0 26px}.split{display:grid;grid-template-columns:1fr 1fr;gap:30px}.note{border-left:4px solid #26a27e;background:#edf8ef;padding:18px 20px;border-radius:0 12px 12px 0}.note p{margin:0}
+    code,pre{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}pre{background:#102b2a;color:#e9f4e9;border-radius:13px;padding:22px;overflow:auto;font-size:.83rem;line-height:1.65}ul{padding-left:22px;color:#36514a}li{margin:9px 0}footer{border-top:1px solid #d9e5db;padding:28px 0 46px;color:#60776c;font-size:.88rem}
+    @media(max-width:750px){nav{align-items:flex-start}nav a{display:inline-block;margin:0 10px 5px 0}.grid,.split{grid-template-columns:1fr}.hero{padding:55px 0 70px}main{padding-top:42px}}
+  </style>
+</head>
+<body>
+<header><div class="wrap"><nav><strong>Tambua</strong><div><a href="#method">Method</a><a href="#start">Get started</a><a href="https://tkcaccia.github.io/Tambua-Analysis/">Analysis</a><a href="https://github.com/tkcaccia/Tambua">GitHub</a></div></nav>
+  <div class="hero"><span class="eyebrow">CellPhenotyper · GigaTIME · fastPLS 0.4</span><h1>Cell identity from virtual tissue markers</h1><p>Tambua quantifies H&amp;E-derived GigaTIME marker scores in individual cells, then assigns cell types with a patient-disjoint fastPLS classifier. Every cell keeps its source image, physical resolution and instance identity.</p><div class="actions"><a class="button" href="#start">Follow the workflow</a><a class="button secondary" href="https://tkcaccia.github.io/Tambua-Analysis/">View validation plan</a></div></div>
+</div></header>
+<main class="wrap">
+  <div class="grid" id="method">
+    <article class="card"><span class="step">01 · Image</span><h3>Read the physical scale</h3><p>OME micrometres-per-pixel metadata determine resampling. A 0.325 µm/pixel image is mapped to GigaTIME’s 0.25 µm/pixel inference grid before marker generation.</p></article>
+    <article class="card"><span class="step">02 · Cells</span><h3>Keep instance IDs aligned</h3><p>CellPhenotyper quantifies all 23 virtual channels over nuclei, cytoplasm or whole-cell masks. Tambua joins tables by sample and positive cell ID, never by row order.</p></article>
+    <article class="card"><span class="step">03 · Identity</span><h3>Fit fastPLS 0.4</h3><p>GitHub <a href="https://github.com/tkcaccia/fastPLS">fastPLS 0.4</a> fits a SIMPLS–LDA model to independently annotated training cells. Training and evaluation patients must be disjoint.</p></article>
+  </div>
+  <section class="split"><div><h2>What the scores mean</h2><p class="lede">GigaTIME produces virtual staining scores from H&amp;E. They are useful model inputs but are not measured protein abundance or calibrated probabilities. Tambua’s cell-type labels are research predictions.</p><div class="note"><p><strong>Alignment gate.</strong> The predicted DAPI image must visibly coincide with H&amp;E nuclei. We also record a numerical overlap with an H&amp;E nuclear proxy. This checks spatial plausibility; it does not establish biological cell-type accuracy.</p></div></div><div><h2>Inputs and outputs</h2><ul><li>Calibrated H&amp;E image plus cell instance mask.</li><li>Per-cell GigaTIME scores from CellPhenotyper, with stable <code>label_id</code>.</li><li>Independent training annotations and patient IDs.</li><li>A fitted <code>.rds</code> fastPLS model, feature sidecar, cell predictions and held-out evaluation report.</li></ul></div></section>
+  <section id="start"><h2>Run the classifier</h2><p class="lede">Install R 4.6 or newer and the pinned GitHub fastPLS 0.4 source using the <a href="https://github.com/tkcaccia/Tambua#inputs-and-alignment">repository instructions</a>. Then build the per-cell table and fit on annotated patients.</p><pre><code>tambua build-table --manifest specimens.csv --output results/cells.csv --compartments cell
+tambua train --table results/cells.csv --model results/cell_classifier.rds --report results/test_report.json
+tambua build-inference --manifest new_specimens.csv --output results/new_cells.csv --compartments cell
+tambua predict --table results/new_cells.csv --model results/cell_classifier.rds --output results/predictions.csv</code></pre></section>
+  <section><h2>Open and reproducible</h2><p class="lede">The <a href="https://github.com/tkcaccia/Tambua">Tambua code</a> and <a href="https://github.com/tkcaccia/fastPLS">fastPLS 0.4</a> are MIT licensed. Dataset images remain with their original providers. The <a href="https://tkcaccia.github.io/Tambua-Analysis/">analysis site</a> tracks dataset scope, resolution checks, DAPI review and matched comparisons with CellViT and HoVer-Net.</p></section>
+</main><footer><div class="wrap">Tambua · Research software for cell phenotyping. Not for clinical decision-making.</div></footer>
+</body></html>
