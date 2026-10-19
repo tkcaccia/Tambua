@@ -1,0 +1,23 @@
+name: CPU tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install package and CPU test dependencies
+        run: python -m pip install --disable-pip-version-check -e '.[datasets]' pytest
+      - name: Run Tambua tests
+        run: python -m pytest -q
