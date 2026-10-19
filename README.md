@@ -18,13 +18,13 @@ git -C "$fastpls_source_dir" fetch --depth 1 origin 265108b6aa250c2534f98ec89037
 git -C "$fastpls_source_dir" checkout --detach FETCH_HEAD
 R CMD INSTALL "$fastpls_source_dir"
 Rscript -e 'stopifnot(as.character(packageVersion("fastPLS")) == "0.4")'
-tambua build-table --manifest specimens.csv --output results/cells.csv --compartments both
+tambua build-table --manifest specimens.csv --output results/cells.csv --compartments cell
 tambua train --table results/cells.csv --model results/cell_classifier.rds --report results/test_report.json
-tambua build-inference --manifest new_specimens.csv --output results/new_cells.csv --compartments both
+tambua build-inference --manifest new_specimens.csv --output results/new_cells.csv --compartments cell
 tambua predict --table results/new_cells.csv --model results/cell_classifier.rds --output results/predictions.csv
 ```
 
-For inference without reference labels, `new_specimens.csv` needs `sample_id,patient_id,nuclei_csv,cyto_csv` and no expert annotation. Use the same compartments as training; the frozen model rejects missing feature columns. The training command reports accuracy, balanced accuracy, macro F1, each class recall/F1, confusion matrix, a training-majority baseline, and equal-weight per-patient accuracy on **test patients only**. A patient or entire test split missing a reference class is listed explicitly; its balanced accuracy and macro F1 are undefined rather than averaged over the remaining classes. It refuses patient leakage or test classes absent from training. Cell-level scores are descriptive; patient-level uncertainty intervals and external validation remain necessary before a performance claim.
+For whole-cell inference without reference labels, `new_specimens.csv` needs `sample_id,patient_id,cell_csv` and no expert annotation. Use the same compartments as training; the frozen model rejects missing feature columns. The training command reports accuracy, balanced accuracy, macro F1, each class recall/F1, confusion matrix, a training-majority baseline, and equal-weight per-patient accuracy on **test patients only**. A patient or entire test split missing a reference class is listed explicitly; its balanced accuracy and macro F1 are undefined rather than averaged over the remaining classes. It refuses patient leakage or test classes absent from training. Cell-level scores are descriptive; patient-level uncertainty intervals and external validation remain necessary before a performance claim.
 
 ## Dataset strategy
 
