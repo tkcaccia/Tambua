@@ -1,6 +1,6 @@
-"""Prepare a calibrated, patient-separated MoNuSAC cross-organ pilot.
+"""Prepare calibrated, patient-separated MoNuSAC evaluation cohorts.
 
-The original organizer ZIPs supply H&E TIFFs, expert XML nuclear polygons and
+The original organizer ZIPs supply H&E TIFFs or SVS, expert XML nuclear polygons and
 pixel spacing. The expanded `cell` mask is an explicit 3 µm perinuclear proxy,
 not expert-drawn cell boundaries. It is used only for conditional typing.
 """
