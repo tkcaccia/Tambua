@@ -4,6 +4,11 @@ args <- commandArgs(trailingOnly = TRUE)
 if (length(args) != 4L || !(args[[1L]] %in% c("train", "predict"))) {
     stop("Usage: fastpls_bridge.R train|predict input.csv model.rds output.csv")
 }
+isolated_library <- Sys.getenv("TAMBUA_R_LIB", "")
+if (nzchar(isolated_library)) {
+    if (!dir.exists(isolated_library)) stop("TAMBUA_R_LIB does not exist")
+    .libPaths(c(isolated_library, .libPaths()))
+}
 if (!requireNamespace("fastPLS", quietly = TRUE) ||
     as.character(utils::packageVersion("fastPLS")) != "0.4") {
     stop("Tambua requires GitHub tkcaccia/fastPLS version 0.4")

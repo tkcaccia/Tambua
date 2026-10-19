@@ -57,6 +57,9 @@ def build_table(manifest_path: str | Path, output_path: str | Path,
     output = []
     seen_specimens = set()
     split_by_patient: dict[str, str] = {}
+    annotated_by_split = {"train": 0, "test": 0}
+    missing_quant_by_split = {"train": 0, "test": 0}
+    missing_quant_by_class: dict[str, int] = {name: 0 for name in CELL_TYPES}
     for specimen in manifest:
         sample = specimen["sample_id"].strip()
         patient = specimen["patient_id"].strip()
@@ -78,7 +81,10 @@ def build_table(manifest_path: str | Path, output_path: str | Path,
             cell_type = annotation["cell_type"].strip().lower()
             if cell_type not in CELL_TYPES:
                 continue  # Ambiguous and out-of-ontology cells are accounted for below.
+            annotated_by_split[split] += 1
             if any(cell_id not in table for table in tables.values()):
+                missing_quant_by_split[split] += 1
+                missing_quant_by_class[cell_type] += 1
                 continue
             merged = dict(sample_id=sample, patient_id=patient, split=split,
                           label_id=cell_id, cell_type=cell_type)
@@ -96,6 +102,9 @@ def build_table(manifest_path: str | Path, output_path: str | Path,
     report = dict(samples=len(seen_specimens), patients=len(split_by_patient),
                   matched_cells=len(output), train_cells=sum(r["split"] == "train" for r in output),
                   test_cells=sum(r["split"] == "test" for r in output),
+                  expert_annotated_cells_by_split=annotated_by_split,
+                  expert_cells_missing_any_quantification_by_split=missing_quant_by_split,
+                  expert_cells_missing_any_quantification_by_class=missing_quant_by_class,
                   feature_names=feature_names, excluded_background_channels=list(BACKGROUND),
                   value_semantics=VALUE_SEMANTICS,
                   reference_labels="independent expert cell types, supplied by manifest")

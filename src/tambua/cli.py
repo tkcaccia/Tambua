@@ -11,17 +11,21 @@ from .download import download, download_orion_crc33
 from .orion import extract_window
 
 
+def compartments(value: str) -> tuple[str, ...]:
+    return {"both": ("nuclei", "cyto"), "nuclei-cell": ("nuclei", "cell")}.get(value, (value,))
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(prog="tambua")
     sub = parser.add_subparsers(dest="command", required=True)
     build = sub.add_parser("build-table", help="Join CellPhenotyper virtual-marker tables with independent cell labels")
     build.add_argument("--manifest", required=True)
     build.add_argument("--output", required=True)
-    build.add_argument("--compartments", choices=("nuclei", "cyto", "cell", "both"), default="both")
+    build.add_argument("--compartments", choices=("nuclei", "cyto", "cell", "both", "nuclei-cell"), default="both")
     future = sub.add_parser("build-inference", help="Join new CellPhenotyper cells without reference labels")
     future.add_argument("--manifest", required=True)
     future.add_argument("--output", required=True)
-    future.add_argument("--compartments", choices=("nuclei", "cyto", "cell", "both"), default="both")
+    future.add_argument("--compartments", choices=("nuclei", "cyto", "cell", "both", "nuclei-cell"), default="both")
     fit = sub.add_parser("train", help="Fit fastPLS and evaluate only held-out patients")
     fit.add_argument("--table", required=True)
     fit.add_argument("--model", required=True)
@@ -50,11 +54,9 @@ def main(argv=None):
     orion.add_argument("--output-dir", required=True)
     args = parser.parse_args(argv)
     if args.command == "build-table":
-        parts = ("nuclei", "cyto") if args.compartments == "both" else (args.compartments,)
-        result = build_table(args.manifest, args.output, compartments=parts)
+        result = build_table(args.manifest, args.output, compartments=compartments(args.compartments))
     elif args.command == "build-inference":
-        parts = ("nuclei", "cyto") if args.compartments == "both" else (args.compartments,)
-        result = build_inference_table(args.manifest, args.output, compartments=parts)
+        result = build_inference_table(args.manifest, args.output, compartments=compartments(args.compartments))
     elif args.command == "train":
         result = train(args.table, args.model, args.report)
     elif args.command == "extract-monusac":
