@@ -48,8 +48,8 @@ def marker_values(row: dict[str, str], compartment: str) -> dict[str, float]:
 def build_table(manifest_path: str | Path, output_path: str | Path,
                 *, compartments: tuple[str, ...] = ("nuclei", "cyto")) -> dict:
     """Join by specimen and cell ID; annotations must be independent of GigaTIME."""
-    if not compartments or any(c not in ("nuclei", "cyto") for c in compartments):
-        raise ValueError("Choose nuclei, cyto or both")
+    if not compartments or any(c not in ("nuclei", "cyto", "cell") for c in compartments):
+        raise ValueError("Choose nuclei, cyto, cell or a combination")
     manifest = rows(manifest_path)
     if not manifest:
         raise ValueError("Empty specimen manifest")
@@ -106,8 +106,8 @@ def build_table(manifest_path: str | Path, output_path: str | Path,
 def build_inference_table(manifest_path: str | Path, output_path: str | Path,
                           *, compartments: tuple[str, ...] = ("nuclei", "cyto")) -> dict:
     """Join unlabelled CellPhenotyper cells for application of a frozen model."""
-    if not compartments or any(c not in ("nuclei", "cyto") for c in compartments):
-        raise ValueError("Choose nuclei, cyto or both")
+    if not compartments or any(c not in ("nuclei", "cyto", "cell") for c in compartments):
+        raise ValueError("Choose nuclei, cyto, cell or a combination")
     manifest = rows(manifest_path)
     if not manifest:
         raise ValueError("Empty inference manifest")

@@ -53,8 +53,10 @@ def test_full_cpu_handoff_and_patient_disjoint_evaluation(tmp_path: Path):
     assert result["matched_cells"] == 120
     assert len(result["feature_names"]) == 42
     assert "nuclei_TRITC" not in result["feature_names"]
-    model = tmp_path / "classifier.npz"
+    model = tmp_path / "classifier.rds"
     report = train(table, model, tmp_path / "report.json")
+    assert report["fastpls_version"] == "0.4"
+    assert json.loads((tmp_path / "classifier.rds.json").read_text())["fastpls_version"] == "0.4"
     assert report["test"]["n"] == 40
     assert report["test"]["balanced_accuracy"] > .9
     assert report["test"]["balanced_accuracy"] > report["majority_baseline"]["balanced_accuracy"]
@@ -105,3 +107,19 @@ def test_marker_semantics_rejected(tmp_path: Path):
     write(manifest, [entry])
     with pytest.raises(ValueError, match="cannot be declared measured"):
         build_table(manifest, tmp_path / "cells.csv")
+
+
+def test_whole_cell_gigatime_table_keeps_cell_compartment(tmp_path: Path):
+    original = specimen(tmp_path, "whole", "p4", "test", 0)
+    records = list(csv.DictReader(Path(original["cyto_csv"]).open()))
+    for row in records:
+        row["mask_name"] = "cell"
+    cell_csv = tmp_path / "whole_cell.csv"
+    write(cell_csv, records)
+    manifest = tmp_path / "whole_manifest.csv"
+    write(manifest, [{"sample_id": "whole", "patient_id": "p4", "cell_csv": str(cell_csv)}])
+    report = build_inference_table(manifest, tmp_path / "whole_features.csv",
+                                   compartments=("cell",))
+    assert report["cells"] == 40
+    assert len(report["feature_names"]) == 21
+    assert report["feature_names"][0] == "cell_DAPI"

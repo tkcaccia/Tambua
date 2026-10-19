@@ -1,18 +1,21 @@
 # Tambua
 
-Tambua is a research pipeline for identifying individual cell types from **CellPhenotyper** per-cell GigaTIME virtual-marker scores. It uses the corrected, MIT-licensed [fastPLS 0.3.0](https://github.com/tkcaccia/fastPLS-py/tree/b4ea261902244bfb84ad933a236d364d19f905ee) SIMPLS–LDA classifier. Its initial ontology is epithelial cell, lymphocyte, macrophage and neutrophil. These are predictions from H&E-derived **virtual scores**, not measured protein expression, calibrated probabilities or clinical diagnoses.
+Tambua is a research pipeline for identifying individual cell types from **CellPhenotyper** per-cell GigaTIME virtual-marker scores. It uses the MIT-licensed [fastPLS 0.4 R package](https://github.com/tkcaccia/fastPLS/tree/265108b6aa250c2534f98ec89037bb5cd001dca0) for SIMPLS–LDA classification. Its initial ontology is epithelial cell, lymphocyte, macrophage and neutrophil. These are predictions from H&E-derived **virtual scores**, not measured protein expression, calibrated probabilities or clinical diagnoses.
 
 ## Inputs and alignment
 
-CellPhenotyper produces instance masks and GigaTIME `*_nuclei_gigatime_mean_intensity.csv` and `*_cyto_gigatime_mean_intensity.csv` files. Tambua joins these by the **same positive `label_id` within each sample**. It takes expert cell-type annotations from a separate CSV (`label_id,cell_type`) and requires a specimen manifest with `sample_id,patient_id,split,nuclei_csv,cyto_csv,labels_csv`. Splits are patient-disjoint. The 21 virtual biological/nuclear channels from each selected compartment are used; TRITC and Cy5 are omitted because they are background channels. DAPI is retained as a nuclear morphology control. The model file contains training features and labels because the current fastPLS native fitted object is not safely serializable; keep it under the source dataset's access terms and do not commit it.
+CellPhenotyper produces instance masks and GigaTIME `*_nuclei_gigatime_mean_intensity.csv`, `*_cyto_gigatime_mean_intensity.csv`, or whole-cell `*_cell_gigatime_mean_intensity.csv` files. Tambua joins these by the **same positive `label_id` within each sample**. It takes expert cell-type annotations from a separate CSV (`label_id,cell_type`) and requires a specimen manifest with `sample_id,patient_id,split` plus the chosen compartment CSV and `labels_csv`. Splits are patient-disjoint. The 21 virtual biological/nuclear channels from each selected compartment are used; TRITC and Cy5 are omitted because they are background channels. DAPI is retained as a nuclear morphology control. The native R fitted model is saved as `.rds` with a `.rds.json` feature/version sidecar; keep both under the source dataset's access terms and do not commit them.
 
 ```bash
 python3 -m venv .venv
 .venv/bin/pip install -e '.[datasets]'
+# In R >= 4.6, install the pinned GitHub release (requires its documented system dependencies):
+Rscript -e 'remotes::install_github("tkcaccia/fastPLS@265108b6aa250c2534f98ec89037bb5cd001dca0", upgrade="never")'
+Rscript -e 'stopifnot(as.character(packageVersion("fastPLS")) == "0.4")'
 tambua build-table --manifest specimens.csv --output results/cells.csv --compartments both
-tambua train --table results/cells.csv --model results/cell_classifier.npz --report results/test_report.json
+tambua train --table results/cells.csv --model results/cell_classifier.rds --report results/test_report.json
 tambua build-inference --manifest new_specimens.csv --output results/new_cells.csv --compartments both
-tambua predict --table results/new_cells.csv --model results/cell_classifier.npz --output results/predictions.csv
+tambua predict --table results/new_cells.csv --model results/cell_classifier.rds --output results/predictions.csv
 ```
 
 For inference without reference labels, `new_specimens.csv` needs `sample_id,patient_id,nuclei_csv,cyto_csv` and no expert annotation. Use the same compartments as training; the frozen model rejects missing feature columns. The training command reports accuracy, balanced accuracy, macro F1, each class recall/F1, confusion matrix, a training-majority baseline, and equal-weight per-patient accuracy on **test patients only**. A patient or entire test split missing a reference class is listed explicitly; its balanced accuracy and macro F1 are undefined rather than averaged over the remaining classes. It refuses patient leakage or test classes absent from training. Cell-level scores are descriptive; patient-level uncertainty intervals and external validation remain necessary before a performance claim.
