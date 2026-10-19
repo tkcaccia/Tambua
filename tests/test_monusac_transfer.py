@@ -7,7 +7,7 @@ import numpy as np
 from PIL import Image
 import tifffile
 
-from scripts.prepare_monusac_transfer import prepare_one, select
+from scripts.prepare_monusac_transfer import prepare_one, select, select_matched_tissues
 
 
 def test_cross_tissue_selection_excludes_every_test_patient():
@@ -19,6 +19,27 @@ def test_cross_tissue_selection_excludes_every_test_patient():
     selected = select(train, test)
     assert [(row["sample_id"], row["split"]) for row in selected] == [
         ("safe", "train"), ("target", "test")]
+
+
+def test_matched_tissue_selection_is_patient_disjoint_and_supports_test_classes():
+    def item(sample, patient, organ, types, side=600):
+        return dict(sample_id=sample, patient_id=patient, organ=organ,
+                    width=side, height=side, expert_types=types)
+    epithelial = {"epithelial": 2, "lymphocyte": 0}
+    both = {"epithelial": 2, "lymphocyte": 2}
+    train = {"records": [item("breast_train", "p1", "breast", both),
+                         item("lung_train", "p2", "lung", epithelial),
+                         item("leak", "p3", "breast", both)]}
+    test = {"records": [item("breast_test", "p4", "breast", epithelial),
+                        item("lung_test", "p5", "lung", epithelial),
+                        item("small_leak", "p3", "breast", epithelial, side=300)]}
+    selected = select_matched_tissues(train, test)
+    assert {r["sample_id"] for r in selected} == {
+        "breast_train", "lung_train", "breast_test", "lung_test"}
+    test["records"][1]["expert_types"] = both
+    import pytest
+    with pytest.raises(ValueError, match="class absent"):
+        select_matched_tissues(train, test)
 
 
 def test_original_polygons_keep_ids_and_physical_scale(tmp_path: Path):

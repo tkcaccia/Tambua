@@ -53,6 +53,10 @@ def build_table(manifest_path: str | Path, output_path: str | Path,
     manifest = rows(manifest_path)
     if not manifest:
         raise ValueError("Empty specimen manifest")
+    organ_values = [specimen.get("organ", "").strip().lower() for specimen in manifest]
+    if any(organ_values) and not all(organ_values):
+        raise ValueError("Every specimen must name its organ when organ metadata is supplied")
+    has_organ = all(organ_values)
     feature_names = [f"{part}_{marker}" for part in compartments for marker in MARKERS]
     output = []
     seen_specimens = set()
@@ -60,7 +64,7 @@ def build_table(manifest_path: str | Path, output_path: str | Path,
     annotated_by_split = {"train": 0, "test": 0}
     missing_quant_by_split = {"train": 0, "test": 0}
     missing_quant_by_class: dict[str, int] = {name: 0 for name in CELL_TYPES}
-    for specimen in manifest:
+    for specimen, organ in zip(manifest, organ_values):
         sample = specimen["sample_id"].strip()
         patient = specimen["patient_id"].strip()
         split = specimen["split"].strip().lower()
@@ -88,6 +92,8 @@ def build_table(manifest_path: str | Path, output_path: str | Path,
                 continue
             merged = dict(sample_id=sample, patient_id=patient, split=split,
                           label_id=cell_id, cell_type=cell_type)
+            if has_organ:
+                merged["organ"] = organ
             for part, table in tables.items():
                 merged.update(marker_values(table[cell_id], part))
             output.append(merged)
@@ -96,7 +102,8 @@ def build_table(manifest_path: str | Path, output_path: str | Path,
     path = Path(output_path)
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", newline="", encoding="utf-8") as stream:
-        writer = csv.DictWriter(stream, fieldnames=["sample_id", "patient_id", "split", "label_id", "cell_type", *feature_names])
+        writer = csv.DictWriter(stream, fieldnames=["sample_id", "patient_id", "split", "label_id", "cell_type",
+                                                   *(["organ"] if has_organ else []), *feature_names])
         writer.writeheader()
         writer.writerows(output)
     report = dict(samples=len(seen_specimens), patients=len(split_by_patient),
@@ -108,6 +115,10 @@ def build_table(manifest_path: str | Path, output_path: str | Path,
                   feature_names=feature_names, excluded_background_channels=list(BACKGROUND),
                   value_semantics=VALUE_SEMANTICS,
                   reference_labels="independent expert cell types, supplied by manifest")
+    if has_organ:
+        report["organs_by_split"] = {
+            split: sorted({r["organ"] for r in output if r["split"] == split})
+            for split in ("train", "test")}
     path.with_suffix(".json").write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
     return report
 

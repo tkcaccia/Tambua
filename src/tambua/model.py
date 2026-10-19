@@ -129,6 +129,11 @@ def train(table_path: str | Path, model_path: str | Path, report_path: str | Pat
     test_patients = {row["patient_id"] for row in testing}
     if not training or not testing or train_patients & test_patients:
         raise ValueError("Nonempty patient-disjoint train and test cohorts required")
+    if "organ" in records[0]:
+        train_organs = {row["organ"].strip().lower() for row in training}
+        test_organs = {row["organ"].strip().lower() for row in testing}
+        if "" in train_organs | test_organs or not test_organs <= train_organs:
+            raise ValueError("Every test tissue must be represented in training")
     classes = sorted({row["cell_type"] for row in training})
     if len(classes) < 2 or any(label not in CELL_TYPES for label in classes):
         raise ValueError("At least two supported cell types required")

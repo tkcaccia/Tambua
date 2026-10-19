@@ -90,6 +90,25 @@ def test_missing_reference_class_is_visible_not_averaged_away():
     assert summary["equal_weight_balanced_accuracy"] is None
 
 
+def test_organ_metadata_rejects_test_tissue_absent_from_training(tmp_path: Path):
+    training = specimen(tmp_path, "train", "p1", "train", 0)
+    testing = specimen(tmp_path, "test", "p2", "test", 1)
+    training["organ"] = "lung"
+    testing["organ"] = "prostate"
+    manifest = tmp_path / "manifest.csv"
+    write(manifest, [training, testing])
+    table = tmp_path / "cells.csv"
+    result = build_table(manifest, table)
+    assert result["organs_by_split"] == {"train": ["lung"], "test": ["prostate"]}
+    with pytest.raises(ValueError, match="test tissue"):
+        train(table, tmp_path / "classifier.rds", tmp_path / "report.json")
+    testing["organ"] = "lung"
+    write(manifest, [training, testing])
+    build_table(manifest, table)
+    assert json.loads(table.with_suffix(".json").read_text())["organs_by_split"] == {
+        "train": ["lung"], "test": ["lung"]}
+
+
 def test_patient_leakage_rejected(tmp_path: Path):
     manifest = tmp_path / "manifest.csv"
     write(manifest, [specimen(tmp_path, "a", "p1", "train", 0),

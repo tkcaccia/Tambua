@@ -12,6 +12,7 @@ import hashlib
 import io
 import json
 from pathlib import Path
+import tempfile
 from xml.etree import ElementTree as ET
 from zipfile import ZipFile
 
@@ -54,6 +55,35 @@ def select(train_audit: dict, test_audit: dict,
     return train + test
 
 
+def select_matched_tissues(train_audit: dict, test_audit: dict,
+                           min_side: int = 512) -> list[dict]:
+    """Select the organizer splits with every test organ represented in training.
+
+    Exclude training patients found *anywhere* in the original test archive,
+    including its small ROIs, before applying the image-size gate.
+    """
+    test_patients = {item["patient_id"] for item in test_audit["records"]}
+    train = [dict(item, split="train") for item in train_audit["records"]
+             if min(item["height"], item["width"]) >= min_side and
+             item["patient_id"] not in test_patients]
+    test = [dict(item, split="test") for item in test_audit["records"]
+            if min(item["height"], item["width"]) >= min_side]
+    train_organs = {item["organ"] for item in train}
+    test_organs = {item["organ"] for item in test}
+    if not train or not test or not test_organs <= train_organs:
+        raise ValueError("Every test tissue must occur in training")
+    if {item["patient_id"] for item in train} & {item["patient_id"] for item in test}:
+        raise ValueError("Training and test patients overlap")
+    for organ in sorted(test_organs):
+        train_types = {name for item in train if item["organ"] == organ
+                       for name, count in item["expert_types"].items() if count}
+        test_types = {name for item in test if item["organ"] == organ
+                      for name, count in item["expert_types"].items() if count}
+        if not test_types <= train_types:
+            raise ValueError(f"Test tissue {organ} has a class absent from its training tissue")
+    return train + test
+
+
 def _write_ome(path: Path, image: np.ndarray, mpp: float, *, rgb: bool = False) -> None:
     metadata = {"axes": "YXS" if rgb else "YX", "PhysicalSizeX": mpp,
                 "PhysicalSizeY": mpp, "PhysicalSizeXUnit": "µm", "PhysicalSizeYUnit": "µm"}
@@ -65,9 +95,21 @@ def prepare_one(archive: ZipFile, item: dict, folder: Path,
                 *, halo_um: float = 3.0) -> dict:
     folder.mkdir(parents=True, exist_ok=False)
     tiff_member = item["svs_member"][:-4] + ".tif"
-    if tiff_member not in archive.namelist():
-        raise ValueError(f"No organizer companion TIFF for {item['sample_id']}")
-    image = np.asarray(Image.open(io.BytesIO(archive.read(tiff_member))).convert("RGB"))
+    if tiff_member in archive.namelist():
+        source_member = tiff_member
+        image = np.asarray(Image.open(io.BytesIO(archive.read(source_member))).convert("RGB"))
+    else:
+        # Sixteen original test ROIs have no companion TIFF. Decode the
+        # organizer SVS at level zero, preserving its native annotation grid.
+        import openslide
+        source_member = item["svs_member"]
+        with tempfile.NamedTemporaryFile(suffix=".svs") as temporary:
+            temporary.write(archive.read(source_member))
+            temporary.flush()
+            with openslide.OpenSlide(temporary.name) as slide:
+                if slide.dimensions != (item["width"], item["height"]):
+                    raise ValueError(f"SVS geometry changed: {item['sample_id']}")
+                image = np.asarray(slide.read_region((0, 0), 0, slide.dimensions).convert("RGB"))
     height, width = image.shape[:2]
     if (height, width) != (item["height"], item["width"]):
         raise ValueError(f"Companion TIFF has different geometry: {item['sample_id']}")
@@ -114,8 +156,8 @@ def prepare_one(archive: ZipFile, item: dict, folder: Path,
     result = {key: item[key] for key in ("sample_id", "patient_id", "organ", "split", "width", "height", "mpp")}
     result.update(expert_nuclei=len(surviving), halo_um=halo_um,
                   quantification_mask="expert-nucleus-anchored 3 µm cell proxy",
-                  source_tiff_member=tiff_member,
-                  source_tiff_sha256=hashlib.sha256(archive.read(tiff_member)).hexdigest(),
+                  source_image_member=source_member,
+                  source_image_sha256=hashlib.sha256(archive.read(source_member)).hexdigest(),
                   expert_xml_sha256=hashlib.sha256(archive.read(item["xml_member"])).hexdigest())
     (folder / "provenance.json").write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
     return result
@@ -131,12 +173,16 @@ def main() -> None:
     parser.add_argument("--train-organ", default="lung")
     parser.add_argument("--test-organ", default="prostate")
     parser.add_argument("--min-side", type=int, default=512)
+    parser.add_argument("--matched-tissues", action="store_true",
+                        help="Use every eligible original tissue in both patient-disjoint splits")
     args = parser.parse_args()
     if args.outdir.exists():
         raise FileExistsError(args.outdir)
     train_audit = json.loads(args.train_audit.read_text())
     test_audit = json.loads(args.test_audit.read_text())
-    selection = select(train_audit, test_audit, args.train_organ, args.test_organ, args.min_side)
+    selection = (select_matched_tissues(train_audit, test_audit, args.min_side)
+                 if args.matched_tissues else
+                 select(train_audit, test_audit, args.train_organ, args.test_organ, args.min_side))
     args.outdir.mkdir(parents=True)
     records = []
     with ZipFile(args.train_zip) as train_zip, ZipFile(args.test_zip) as test_zip:
@@ -145,7 +191,11 @@ def main() -> None:
             records.append(prepare_one(archive, item, args.outdir / item["sample_id"]))
     report = {"training_archive_sha256": digest(args.train_zip),
               "testing_archive_sha256": digest(args.test_zip),
-              "selection": {"train_organ": args.train_organ, "test_organ": args.test_organ,
+              "selection": {"mode": "matched_tissues" if args.matched_tissues else "cross_tissue",
+                            "train_organs": sorted({r["organ"] for r in selection if r["split"] == "train"}),
+                            "test_organs": sorted({r["organ"] for r in selection if r["split"] == "test"}),
+                            "train_organ": None if args.matched_tissues else args.train_organ,
+                            "test_organ": None if args.matched_tissues else args.test_organ,
                             "min_native_side_px": args.min_side,
                             "excluded_train_patients_if_anywhere_in_test": True},
               "records": records}
