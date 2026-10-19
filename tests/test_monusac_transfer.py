@@ -2,6 +2,8 @@ from pathlib import Path
 from zipfile import ZipFile
 import csv
 import io
+import sys
+import types
 
 import numpy as np
 from PIL import Image
@@ -75,3 +77,46 @@ def test_original_polygons_keep_ids_and_physical_scale(tmp_path: Path):
     assert np.array_equal(nuclei[nuclei > 0], cell[nuclei > 0])
     with (tmp_path / "sample/expert_types.csv").open(newline="") as source:
         assert [row["cell_type"] for row in csv.DictReader(source)] == ["epithelial", "lymphocyte"]
+
+
+def test_companion_tiff_bgr_is_corrected_from_scanner_svs(tmp_path: Path, monkeypatch):
+    canonical = np.zeros((30, 30, 3), dtype=np.uint8)
+    canonical[:] = [190, 85, 35]
+    companion = Image.fromarray(canonical[..., ::-1], "RGB")
+    tiff = io.BytesIO()
+    companion.save(tiff, format="TIFF")
+
+    class FakeSlide:
+        dimensions = (30, 30)
+
+        def __init__(self, path):
+            assert Path(path).read_bytes() == b"scanner-svs"
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_):
+            return None
+
+        def read_region(self, *_):
+            return Image.fromarray(canonical, "RGB")
+
+    monkeypatch.setitem(sys.modules, "openslide", types.SimpleNamespace(OpenSlide=FakeSlide))
+    base = "source/patient/sample"
+    xml = b'''<Annotations MicronsPerPixel="0.25"><Annotation><Attributes>
+      <Attribute Name="Epithelial"/></Attributes><Regions><Region><Vertices>
+      <Vertex X="4" Y="4"/><Vertex X="8" Y="4"/><Vertex X="8" Y="8"/>
+      </Vertices></Region></Regions></Annotation></Annotations>'''
+    archive_path = tmp_path / "source.zip"
+    with ZipFile(archive_path, "w") as archive:
+        archive.writestr(base + ".svs", b"scanner-svs")
+        archive.writestr(base + ".tif", tiff.getvalue())
+        archive.writestr(base + ".xml", xml)
+    item = dict(sample_id="sample", patient_id="patient", organ="lung", split="train",
+                width=30, height=30, mpp=.25, svs_member=base + ".svs",
+                xml_member=base + ".xml")
+    with ZipFile(archive_path) as archive:
+        report = prepare_one(archive, item, tmp_path / "sample")
+    assert report["source_image_member"] == base + ".svs"
+    assert report["companion_tiff_channel_order"] == "BGR_mistagged_as_RGB"
+    assert np.array_equal(tifffile.imread(tmp_path / "sample/he.ome.tif"), canonical)

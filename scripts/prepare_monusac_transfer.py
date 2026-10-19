@@ -95,12 +95,11 @@ def prepare_one(archive: ZipFile, item: dict, folder: Path,
                 *, halo_um: float = 3.0) -> dict:
     folder.mkdir(parents=True, exist_ok=False)
     tiff_member = item["svs_member"][:-4] + ".tif"
-    if tiff_member in archive.namelist():
-        source_member = tiff_member
-        image = np.asarray(Image.open(io.BytesIO(archive.read(source_member))).convert("RGB"))
-    else:
-        # Sixteen original test ROIs have no companion TIFF. Decode the
-        # organizer SVS at level zero, preserving its native annotation grid.
+    members = set(archive.namelist())
+    if item["svs_member"] in members:
+        # The organizer's companion TIFFs can be BGR while tagged as RGB.
+        # OpenSlide's level-zero SVS image is the color reference for every
+        # ROI, including those with a companion TIFF.
         import openslide
         source_member = item["svs_member"]
         with tempfile.NamedTemporaryFile(suffix=".svs") as temporary:
@@ -110,6 +109,24 @@ def prepare_one(archive: ZipFile, item: dict, folder: Path,
                 if slide.dimensions != (item["width"], item["height"]):
                     raise ValueError(f"SVS geometry changed: {item['sample_id']}")
                 image = np.asarray(slide.read_region((0, 0), 0, slide.dimensions).convert("RGB"))
+        if tiff_member in members:
+            tiff_rgb = np.asarray(Image.open(io.BytesIO(archive.read(tiff_member))).convert("RGB"))
+            if np.array_equal(tiff_rgb, image):
+                companion_tiff_channel_order = "RGB"
+            elif np.array_equal(tiff_rgb[..., ::-1], image):
+                companion_tiff_channel_order = "BGR_mistagged_as_RGB"
+            else:
+                raise ValueError(f"Companion TIFF differs from scanner SVS beyond R/B order: {item['sample_id']}")
+        else:
+            companion_tiff_channel_order = "absent"
+    elif tiff_member in members:
+        # This fallback supports non-organizer synthetic fixtures; it cannot
+        # verify the TIFF's color order without the scanner SVS.
+        source_member = tiff_member
+        image = np.asarray(Image.open(io.BytesIO(archive.read(source_member))).convert("RGB"))
+        companion_tiff_channel_order = "unverified_no_svs"
+    else:
+        raise ValueError(f"No source image for {item['sample_id']}")
     height, width = image.shape[:2]
     if (height, width) != (item["height"], item["width"]):
         raise ValueError(f"Companion TIFF has different geometry: {item['sample_id']}")
@@ -158,6 +175,9 @@ def prepare_one(archive: ZipFile, item: dict, folder: Path,
                   quantification_mask="expert-nucleus-anchored 3 µm cell proxy",
                   source_image_member=source_member,
                   source_image_sha256=hashlib.sha256(archive.read(source_member)).hexdigest(),
+                  source_color_reference=("scanner_svs_rgb" if source_member.endswith(".svs")
+                                          else "unverified_companion_tiff_rgb"),
+                  companion_tiff_channel_order=companion_tiff_channel_order,
                   expert_xml_sha256=hashlib.sha256(archive.read(item["xml_member"])).hexdigest())
     (folder / "provenance.json").write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
     return result
