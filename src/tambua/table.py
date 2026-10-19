@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 
 MARKERS = (
-    "DAPI", "PD-1", "CD14", "CD4", "T-bet", "CD34", "CD68", "CD16",
+    "DAPI", "TRITC", "Cy5", "PD-1", "CD14", "CD4", "T-bet", "CD34", "CD68", "CD16",
     "CD11c", "CD138", "CD20", "CD3", "CD8", "PD-L1", "CK", "Ki67",
     "Tryptase", "Actin-D", "Caspase3-D", "PHH3-B", "Transgelin",
 )
@@ -112,7 +112,7 @@ def build_table(manifest_path: str | Path, output_path: str | Path,
                   expert_annotated_cells_by_split=annotated_by_split,
                   expert_cells_missing_any_quantification_by_split=missing_quant_by_split,
                   expert_cells_missing_any_quantification_by_class=missing_quant_by_class,
-                  feature_names=feature_names, excluded_background_channels=list(BACKGROUND),
+                  feature_names=feature_names, included_background_control_channels=list(BACKGROUND),
                   value_semantics=VALUE_SEMANTICS,
                   reference_labels="independent expert cell types, supplied by manifest")
     if has_organ:
@@ -161,6 +161,7 @@ def build_inference_table(manifest_path: str | Path, output_path: str | Path,
         writer.writeheader()
         writer.writerows(output)
     report = dict(samples=len(seen), cells=len(output), feature_names=features,
+                  included_background_control_channels=list(BACKGROUND),
                   reference_labels_used=False, value_semantics=VALUE_SEMANTICS)
     path.with_suffix(".json").write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
     return report

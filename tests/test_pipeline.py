@@ -51,12 +51,17 @@ def test_full_cpu_handoff_and_patient_disjoint_evaluation(tmp_path: Path):
     table = tmp_path / "cells.csv"
     result = build_table(manifest, table)
     assert result["matched_cells"] == 120
-    assert len(result["feature_names"]) == 42
-    assert "nuclei_TRITC" not in result["feature_names"]
+    assert len(result["feature_names"]) == 46
+    assert result["included_background_control_channels"] == ["TRITC", "Cy5"]
+    assert all(f"{part}_{channel}" in result["feature_names"]
+               for part in ("nuclei", "cyto") for channel in ("TRITC", "Cy5"))
     model = tmp_path / "classifier.rds"
     report = train(table, model, tmp_path / "report.json")
     assert report["fastpls_version"] == "0.4"
-    assert json.loads((tmp_path / "classifier.rds.json").read_text())["fastpls_version"] == "0.4"
+    model_metadata = json.loads((tmp_path / "classifier.rds.json").read_text())
+    assert model_metadata["fastpls_version"] == "0.4"
+    assert model_metadata["format"] == "tambua-fastpls-r-v3-all-23-channels"
+    assert len(model_metadata["feature_names"]) == 46
     assert report["test"]["n"] == 40
     assert report["test"]["balanced_accuracy"] > .9
     assert report["test"]["balanced_accuracy"] > report["majority_baseline"]["balanced_accuracy"]
@@ -71,6 +76,11 @@ def test_full_cpu_handoff_and_patient_disjoint_evaluation(tmp_path: Path):
     future = tmp_path / "future_cells.csv"
     assert build_inference_table(future_manifest, future)["cells"] == 40
     assert predict(future, model, tmp_path / "future_predictions.csv") == 40
+    legacy_metadata = {**model_metadata, "format": "tambua-fastpls-r-v2"}
+    (tmp_path / "classifier.rds.json").write_text(json.dumps(legacy_metadata))
+    with pytest.raises(ValueError, match="retrain with all 23"):
+        predict(future, model, tmp_path / "legacy_predictions.csv")
+    (tmp_path / "classifier.rds.json").write_text(json.dumps(model_metadata))
     with pytest.raises(FileExistsError):
         train(table, model, tmp_path / "another_report.json")
     assert not (tmp_path / "another_report.json").exists()
@@ -128,6 +138,18 @@ def test_marker_semantics_rejected(tmp_path: Path):
         build_table(manifest, tmp_path / "cells.csv")
 
 
+def test_missing_background_control_is_rejected_for_full_panel(tmp_path: Path):
+    entry = specimen(tmp_path, "a", "p1", "train", 0)
+    records = list(csv.DictReader(Path(entry["nuclei_csv"]).open()))
+    for row in records:
+        del row["TRITC"]
+    write(Path(entry["nuclei_csv"]), records)
+    manifest = tmp_path / "manifest.csv"
+    write(manifest, [entry])
+    with pytest.raises(ValueError, match="Missing GigaTIME channels"):
+        build_table(manifest, tmp_path / "cells.csv")
+
+
 def test_whole_cell_gigatime_table_keeps_cell_compartment(tmp_path: Path):
     original = specimen(tmp_path, "whole", "p4", "test", 0)
     records = list(csv.DictReader(Path(original["cyto_csv"]).open()))
@@ -140,5 +162,5 @@ def test_whole_cell_gigatime_table_keeps_cell_compartment(tmp_path: Path):
     report = build_inference_table(manifest, tmp_path / "whole_features.csv",
                                    compartments=("cell",))
     assert report["cells"] == 40
-    assert len(report["feature_names"]) == 21
+    assert len(report["feature_names"]) == 23
     assert report["feature_names"][0] == "cell_DAPI"

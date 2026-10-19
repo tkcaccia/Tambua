@@ -174,7 +174,7 @@ def train(table_path: str | Path, model_path: str | Path, report_path: str | Pat
                   test_by_patient=patient_summary(testing, actual_names, predicted_names, classes),
                   majority_baseline=metrics(actual_names, np.full(len(testing), majority), classes),
                   claim_limit="Virtual-marker scores are not measured protein abundance; this is research cell-type prediction.")
-    metadata_path.write_text(json.dumps(dict(format="tambua-fastpls-r-v2", classes=classes,
+    metadata_path.write_text(json.dumps(dict(format="tambua-fastpls-r-v3-all-23-channels", classes=classes,
                                              feature_names=names, components=components,
                                              fastpls_version=FASTPLS_VERSION,
                                              fastpls_source=FASTPLS_SOURCE,
@@ -188,10 +188,14 @@ def train(table_path: str | Path, model_path: str | Path, report_path: str | Pat
 def predict(table_path: str | Path, model_path: str | Path, output_path: str | Path) -> int:
     model_path = Path(model_path)
     metadata = json.loads(Path(str(model_path) + ".json").read_text(encoding="utf-8"))
-    if metadata.get("format") != "tambua-fastpls-r-v2" or metadata.get("fastpls_version") != FASTPLS_VERSION:
-        raise ValueError("Incompatible Tambua fastPLS 0.4 classifier")
+    if metadata.get("format") != "tambua-fastpls-r-v3-all-23-channels" or metadata.get("fastpls_version") != FASTPLS_VERSION:
+        raise ValueError("Incompatible Tambua fastPLS 0.4 classifier; retrain with all 23 GigaTIME channels")
     records = rows(table_path)
+    if not records:
+        raise ValueError("Empty cell table")
     names = metadata["feature_names"]
+    if names != feature_names(list(records[0])):
+        raise ValueError("Inference feature panel differs from the full-channel fitted model")
     values = _predict_fastpls(matrix(records, names), model_path)
     classes = metadata["classes"]
     if any(value not in classes for value in values):
