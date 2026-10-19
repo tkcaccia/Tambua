@@ -17,6 +17,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+      - name: Install fastPLS numerical libraries
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq libopenblas-dev liblapack-dev
       - name: Install package and CPU test dependencies
         run: python -m pip install --disable-pip-version-check -e '.[datasets]' pytest
       - name: Run Tambua tests
