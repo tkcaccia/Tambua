@@ -41,10 +41,10 @@ For a physically calibrated ORION validation window, download the registered H&E
 ```bash
 tambua extract-orion --he he_registered.ome.tif --mask cell_mask.ome.tif \
   --measured-csv measured_cells.csv --sample CRC33_01 --x 24576 --y 39424 \
-  --size 2048 --output-dir data/orion_crc33_01/window_x24576_y39424
+  --size 2048 --output-dir data/orion_crc33_01/window_x24576_y39424_verified
 ```
 
-This checks the OME physical pixel sizes and native image/mask alignment, removes instances cut by the crop boundary, joins every retained instance to exactly one **measured** protein row, and writes calibrated OME-TIFFs with source hashes. Those rows are a separate reference for future evaluation; `extract-orion` does not assign cell types or run GigaTIME. The demonstrated CRC33_01 window is 0.325 µm/pixel and contains 4,104 complete cells. It is one patient and therefore cannot establish held-out classification accuracy.
+This checks the OME physical pixel sizes and native image/mask alignment, removes instances cut by the crop boundary, joins every retained instance to exactly one **measured** protein row, checks that its published centroid matches the mask, and writes calibrated OME-TIFFs with source hashes. Those rows are a separate reference for future evaluation; `extract-orion` does not assign cell types or run GigaTIME. The demonstrated CRC33_01 window is 0.325 µm/pixel and contains 4,104 complete cells. It is one patient and therefore cannot establish held-out classification accuracy.
 
 ## Relationship to Bora
 

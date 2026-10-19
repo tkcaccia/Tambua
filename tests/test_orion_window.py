@@ -21,10 +21,12 @@ def fixture(tmp_path: Path, mask_mpp: float = .325) -> tuple[Path, Path, Path]:
                          metadata=dict(axes=axes, PhysicalSizeX=mpp, PhysicalSizeXUnit="µm",
                                        PhysicalSizeY=mpp, PhysicalSizeYUnit="µm"))
     with table.open("w", newline="", encoding="utf-8") as stream:
-        writer = csv.DictWriter(stream, fieldnames=["CellID", "CD68", "Pan-CK"])
+        writer = csv.DictWriter(stream, fieldnames=["CellID", "X_centroid", "Y_centroid", "CD68", "Pan-CK"])
         writer.writeheader()
-        writer.writerows([{"CellID": 7, "CD68": .2, "Pan-CK": .7},
-                          {"CellID": 8, "CD68": .8, "Pan-CK": .1}])
+        writer.writerows([{"CellID": 7, "X_centroid": 109.5, "Y_centroid": 109.5,
+                           "CD68": .2, "Pan-CK": .7},
+                          {"CellID": 8, "X_centroid": 204.5, "Y_centroid": 3.5,
+                           "CD68": .8, "Pan-CK": .1}])
     return he, cells, table
 
 
@@ -35,6 +37,7 @@ def test_orion_window_keeps_only_complete_cells_and_physical_scale(tmp_path: Pat
     assert report["source_mpp"] == .325
     assert report["retained_complete_cells"] == 1
     assert report["excluded_edge_cells"] == 1
+    assert report["max_centroid_error_px"] == 0
     assert len(report["input_sha256"]) == 3
     with tifffile.TiffFile(out / "he.ome.tif") as tf:
         assert 'PhysicalSizeX="0.325"' in tf.ome_metadata
@@ -49,3 +52,12 @@ def test_orion_window_rejects_misaligned_physical_grid(tmp_path: Path):
     with pytest.raises(ValueError, match="spacing disagree"):
         extract_window(*source, tmp_path / "window", x=0, y=0, size=512, sample="synthetic")
     assert not (tmp_path / "window").exists()
+
+
+def test_orion_window_rejects_wrong_measured_coordinates(tmp_path: Path):
+    he, mask, table = fixture(tmp_path)
+    content = table.read_text().replace("109.5,109.5", "120.0,109.5")
+    table.write_text(content)
+    with pytest.raises(ValueError, match="centroid disagrees"):
+        extract_window(he, mask, table, tmp_path / "window", x=0, y=0, size=512,
+                       sample="synthetic")

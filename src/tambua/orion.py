@@ -79,8 +79,9 @@ def extract_window(he_path: str | Path, mask_path: str | Path,
     measured = []
     with measured_csv.open(newline="", encoding="utf-8-sig") as stream:
         reader = csv.DictReader(stream)
-        if not reader.fieldnames or "CellID" not in reader.fieldnames:
-            raise ValueError("ORION measured table has no CellID column")
+        required = {"CellID", "X_centroid", "Y_centroid"}
+        if not reader.fieldnames or not required.issubset(reader.fieldnames):
+            raise ValueError("ORION measured table lacks cell ID or centroid coordinates")
         fieldnames = list(reader.fieldnames)
         for row in reader:
             if int(row["CellID"]) in selected:
@@ -88,6 +89,20 @@ def extract_window(he_path: str | Path, mask_path: str | Path,
     present = {int(row["CellID"]) for row in measured}
     if present != selected or len(measured) != len(selected):
         raise ValueError("Cell mask IDs do not uniquely match measured ORION rows")
+    yy, xx = np.nonzero(cells)
+    ids, inverse = np.unique(cells[yy, xx], return_inverse=True)
+    counts = np.bincount(inverse)
+    xsum = np.bincount(inverse, weights=xx)
+    ysum = np.bincount(inverse, weights=yy)
+    errors = []
+    for row in measured:
+        index = int(np.searchsorted(ids, int(row["CellID"])))
+        dx = float(xsum[index] / counts[index] + x - float(row["X_centroid"]))
+        dy = float(ysum[index] / counts[index] + y - float(row["Y_centroid"]))
+        error = math.hypot(dx, dy)
+        if not math.isfinite(error) or error > 0.5:
+            raise ValueError("Measured-cell centroid disagrees with registered mask")
+        errors.append(error)
     destination.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix=".orion-window-", dir=destination.parent) as temp:
         folder = Path(temp)
@@ -104,6 +119,7 @@ def extract_window(he_path: str | Path, mask_path: str | Path,
         report = dict(dataset="ORION CRC", sample=sample, source_section="same-section registered H&E and IF",
                       source_mpp=mpp, source_window_xywh=[x, y, size, size],
                       retained_complete_cells=len(selected), excluded_edge_cells=len(edge_ids),
+                      max_centroid_error_px=float(max(errors)),
                       measured_protein_values="measured ORION IF, not GigaTIME outputs",
                       input_sha256={p.name: _sha256(p) for p in (he_path, mask_path, measured_csv)})
         (folder / "provenance.json").write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
